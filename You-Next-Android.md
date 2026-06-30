@@ -1,217 +1,148 @@
-# Android CI/CD Pipeline Documentation
+# Android GitLab CI/CD Pipeline
 
 ## Overview
 
-This GitLab CI/CD pipeline automates the complete Android application build, security scanning, artifact generation, and release process.
+This pipeline automates the Android application build, code quality analysis, artifact generation, and application distribution.
 
 ### Pipeline Flow
 
 ```
-Source Code
-     │
-     ▼
-Initialize
-     │
-     ▼
-Dependency Resolution
-     │
-     ▼
 Build
-     │
-     ▼
-CycloneDX SBOM Generation
-     │
-     ▼
-SonarQube Analysis
-     │
-     ▼
-APK Packaging
-     │
-     ▼
-Upload APK & SBOM to Artifactory
-     │
-     ▼
-Firebase App Distribution
+   │
+   ▼
+Sonar Analysis
+   │
+   ▼
+Build UAT
+   │
+   ▼
+Firebase Release
 ```
 
 ---
 
 # Pipeline Stages
 
-## 1. Initialize
+## Stage 1: Build
 
-This stage prepares the build environment.
+The **Build** stage prepares the project and generates the Software Bill of Materials (SBOM).
 
-Activities performed:
+### Activities
 
-- Downloads project source code.
-- Configures Java.
-- Configures Android SDK.
-- Configures Gradle.
-- Loads required environment variables.
+- Stops any existing Gradle daemon.
+- Executes the CycloneDX Gradle task.
+- Generates SBOM files:
+  - `bom.json`
+  - `bom.xml`
+- Uploads both files to Artifactory.
 
----
+### Purpose
 
-## 2. Dependency Resolution
+The SBOM contains a complete inventory of all third-party libraries and dependencies used by the application. It is mainly used for:
 
-Gradle downloads all project dependencies from the configured repositories.
-
-Repositories include:
-
-- Internal Artifactory
-- Maven repositories (configured in project)
-
----
-
-## 3. Build Stage
-
-The application is compiled using Gradle.
-
-Example command
-
-```bash
-./gradlew clean assemble<BuildVariant>
-```
-
-Output:
-
-- Compiled APK
-- Build logs
-
----
-
-## 4. CycloneDX SBOM Generation
-
-After the build completes successfully, the CycloneDX Gradle plugin generates a Software Bill of Materials (SBOM).
-
-Generated files
-
-- bom.json
-- bom.xml
-
-Purpose
-
-- Dependency inventory
 - Security compliance
-- Vulnerability scanning
-- License compliance
+- Dependency tracking
+- Vulnerability management
+- Software license verification
 
-### Artifactory Location
+### Verify SBOM Files
 
-The generated SBOM files are uploaded to Artifactory.
+Login to **Artifactory** and navigate to the configured repository.
 
-Example
+Example location:
 
 ```
-<Artifactory Repository>/<Application Name>/<Build Number>/sbom/
-
-├── bom.json
-└── bom.xml
+mobile-android/
+    build-number/
+        bom.json
+        bom.xml
 ```
-
-Developers can download both files directly from Artifactory after the pipeline completes.
 
 ---
 
-## 5. SonarQube Analysis
+# Stage 2: Sonar Analysis
 
-After SBOM generation, the pipeline executes SonarQube static code analysis.
+This stage performs static code analysis using SonarQube.
 
-The project configuration is taken from
+The analysis uses the configuration available in:
 
 ```
 sonar.properties
 ```
 
-which contains
+which contains:
 
 - Project Key
 - Project Name
 - Sonar Server URL
-- Source directories
-- Coverage configuration
+- Source folders
 
-### Verify Sonar Analysis
+### Verify Sonar Results
 
-Open SonarQube Web UI.
+Open the SonarQube Web UI.
 
-Search using the configured
+Search using either:
 
-```
-sonar.projectKey
-```
+- Project Key
+- Project Name
 
-or
+After the scan completes you can review:
 
-```
-sonar.projectName
-```
-
-You can verify
-
-- Code Quality
 - Bugs
 - Vulnerabilities
-- Security Hotspots
 - Code Smells
+- Security Hotspots
 - Coverage
-- Duplications
+- Quality Gate Status
 
 ---
 
-## 6. APK Packaging
+# Stage 3: Build UAT
 
-Once Sonar analysis succeeds, Gradle generates the APK.
+This stage builds the UAT Release APK.
 
-Output example
+Gradle command used:
+
+```bash
+./gradlew assembleUatRelease
+```
+
+After a successful build:
+
+- APK is generated.
+- APK is uploaded to Artifactory.
+
+### APK Location
 
 ```
-app-release.apk
+app/build/outputs/apk/uat/release/
 ```
+
+### Verify APK Upload
+
+Login to Artifactory.
+
+Navigate to the configured repository.
+
+Verify that the latest APK corresponding to the current build version is available.
 
 ---
 
-## 7. Upload to Artifactory
+# Stage 4: Firebase Release
 
-The generated APK and SBOM files are uploaded to Artifactory.
+This is the final stage of the pipeline.
 
-Uploaded files
+The pipeline:
 
-```
-APK
-bom.json
-bom.xml
-```
+- Downloads the APK from Artifactory.
+- Verifies the APK.
+- Uploads the APK to Firebase App Distribution.
 
-Example structure
+### Verify Firebase Distribution
 
-```
-Application/
+Open Firebase Console.
 
-Build-105/
-
-app-release.apk
-bom.json
-bom.xml
-```
-
-Developers can verify the uploaded artifacts by navigating to the corresponding repository and build folder in Artifactory.
-
----
-
-## 8. Firebase App Distribution
-
-The final stage distributes the APK to Firebase App Distribution.
-
-This allows testers to download and install the latest application.
-
-The pipeline automatically uploads the APK to the configured Firebase project.
-
-### Verify Release
-
-Login to Firebase Console.
-
-Navigate to
+Navigate to:
 
 ```
 App Distribution
@@ -219,13 +150,13 @@ App Distribution
 
 Select the Android application.
 
-Verify
+Verify:
 
 - Latest uploaded build
-- Release notes
-- Build version
-- Distribution status
-- Testers/Groups
+- Version
+- Build Number
+- Release Notes (if configured)
+- Tester Groups
 
 ---
 
@@ -237,62 +168,58 @@ Open the GitLab project.
 
 ## Step 2
 
-Navigate to
+Navigate to:
 
 ```
-Build → Pipelines
+Build
+   ↓
+Pipelines
 ```
 
 ## Step 3
 
-Click
-
-```
-Run Pipeline
-```
+Click **Run Pipeline**.
 
 ## Step 4
 
 Select the required branch.
 
+Example:
+
+```
+develop
+feature/*
+release/*
+```
+
 ## Step 5
 
-Provide pipeline variables (if applicable).
+Provide pipeline variables (if required).
 
 ## Step 6
 
-Click
+Click **Run Pipeline**.
 
-```
-Run Pipeline
-```
-
-The pipeline will execute all configured stages sequentially.
+The pipeline will execute all stages sequentially.
 
 ---
 
-# Pipeline Outputs
+# Pipeline Summary
 
-| Stage | Output |
-|--------|--------|
-| Build | APK |
-| CycloneDX | bom.json, bom.xml |
-| SonarQube | Code Quality Report |
-| Artifactory | APK + SBOM |
-| Firebase | Distributed APK |
+| Stage | Description | Output |
+|--------|-------------|--------|
+| Build | Generates SBOM | bom.json, bom.xml |
+| Sonar Analysis | Static code analysis | SonarQube Report |
+| Build UAT | Builds Android APK | UAT APK |
+| Firebase Release | Distributes APK | Firebase Build |
 
 ---
 
 # Verification Checklist
 
-✔ Pipeline completed successfully
-
-✔ SonarQube analysis available
-
-✔ APK uploaded to Artifactory
-
-✔ bom.json uploaded
-
-✔ bom.xml uploaded
-
-✔ Firebase distribution successful
+- ✅ Build completed successfully
+- ✅ bom.json uploaded to Artifactory
+- ✅ bom.xml uploaded to Artifactory
+- ✅ Sonar analysis completed successfully
+- ✅ APK uploaded to Artifactory
+- ✅ APK available in Firebase App Distribution
